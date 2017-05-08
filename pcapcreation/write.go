@@ -1,4 +1,4 @@
-package pcapio
+package pcapcreation
 
 import (
 	"encoding/json"
