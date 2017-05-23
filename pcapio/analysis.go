@@ -9,7 +9,46 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
-// AnalyzePayload returns the payload for a single pcap for the specified OSI-ish layer
+// AnalyzePayload returns the payload for a single pcap for the specified OSI-ish layer(s)
+func AnalyzePayloadLayer(path string, eth, ip, tcp bool) (string, error) {
+	var out string
+	handle, err := pcap.OpenOffline(path)
+	if err != nil {
+		return out, err
+	}
+	defer handle.Close()
+	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+
+	for {
+		packet, err := packetSource.NextPacket()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return out, err
+		}
+
+		ethLayer := packet.Layer(layers.LayerTypeEthernet)
+		if eth && ethLayer != nil {
+			out += PrintEth(ethLayer.(*layers.Ethernet))
+		}
+
+		ipv4Layer := packet.Layer(layers.LayerTypeIPv4)
+		if ip && ipv4Layer != nil {
+			out += PrintIPv4(ipv4Layer.(*layers.IPv4))
+		}
+
+		tcpLayer := packet.Layer(layers.LayerTypeTCP)
+		if tcp && tcpLayer != nil {
+			out += PrintTCP(tcpLayer.(*layers.TCP))
+		}
+
+	}
+
+	return out, nil
+}
+
+// AnalyzePayload returns the payload for a single pcap
 func AnalyzePayload(path string) (string, error) {
 	var out string
 	handle, err := pcap.OpenOffline(path)

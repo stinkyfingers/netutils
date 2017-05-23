@@ -63,8 +63,18 @@ func ImportPayloads(path string) ([][]byte, error) {
 // WritePayloadsToFile creates packets from raw bytes ([][]byte) and writes them as pcaps
 func WritePayloadsToFile(payloads [][]byte, path string) error {
 	var packets [][]byte
+	var previousLen int
+	var fin bool
 	for i, payload := range payloads {
-		packet, err := CreatePacket(payload, i)
+		//fin
+		if i == len(payloads)-1 {
+			fin = true
+		}
+		//seq
+		if i > 0 {
+			previousLen += len(payloads[i-1])
+		}
+		packet, err := CreatePacket(payload, i, fin, previousLen)
 		if err != nil {
 			return err
 		}
@@ -76,7 +86,7 @@ func WritePayloadsToFile(payloads [][]byte, path string) error {
 }
 
 // CreatePacket returns a []byte datagram
-func CreatePacket(data []byte, seq int) ([]byte, error) {
+func CreatePacket(data []byte, seq int, fin bool, previousLen int) ([]byte, error) {
 	inter, err := net.InterfaceByName("en0")
 	if err != nil {
 		return nil, err
@@ -101,7 +111,7 @@ func CreatePacket(data []byte, seq int) ([]byte, error) {
 	tcp := &layers.TCP{
 		SrcPort: 8000,
 		DstPort: 9000,
-		Seq:     uint32(seq),
+		Seq:     uint32(seq + previousLen),
 		Ack:     1,
 		PSH:     true,
 		Window:  2,
@@ -109,6 +119,7 @@ func CreatePacket(data []byte, seq int) ([]byte, error) {
 			Payload: data,
 		},
 		DataOffset: 5, //TODO aloways 5??
+		FIN:        fin,
 	}
 	tcp.SetNetworkLayerForChecksum(ip)
 	// ip.Length = 20 + uint16(len(tcp.Payload)) //TODO ???
