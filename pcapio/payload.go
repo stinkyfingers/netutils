@@ -3,6 +3,7 @@ package pcapio
 import (
 	"errors"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,8 +28,12 @@ func (s *streamFactory) New(a, b gopacket.Flow) tcpassembly.Stream {
 func (s *streamFactory) Reassembled(r []tcpassembly.Reassembly) {
 	s.reassembly = r
 	for i := range r {
-		// log.Print(r[i].Bytes)
-		s.payloads = append(s.payloads, r[i].Bytes)
+		log.Print(r[i].Bytes)
+		if len(s.payloads) == 0 {
+			s.payloads = [][]byte{r[i].Bytes}
+		} else {
+			s.payloads[0] = append(s.payloads[0], r[i].Bytes...)
+		}
 	}
 }
 

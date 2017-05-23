@@ -25,14 +25,17 @@ import (
 // err := WritePayloadsToFile(payloads, myfile.pcap)
 
 type PayloadDatum struct {
-	Payload string `json:"payload"`
+	Payload  string `json:"payload"`
+	SrcPort  int    `json:"srcPort"`
+	DstPort  int    `json:"dstPort"`
+	RawBytes []byte `json:"-"`
 }
 
 type PayloadData []PayloadDatum
 
 // ImportPayloads takes a JSON file and converts to [][]byte, for passing to WritePayloadsToFile
-func ImportPayloads(path string) ([][]byte, error) {
-	var payloads [][]byte
+func ImportPayloads(path string) (PayloadData, error) {
+	// var payloads [][]byte
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -44,37 +47,40 @@ func ImportPayloads(path string) ([][]byte, error) {
 		return nil, err
 	}
 
-	for _, datum := range data {
-		var payload []byte
+	for d, datum := range data {
+		// var payload []byte
 		arr := strings.Split(datum.Payload, ",")
 		for _, a := range arr {
 			i, err := strconv.Atoi(a)
 			if err != nil {
 				return nil, err
 			}
+			temp := data[d]
+			temp.RawBytes = append(temp.RawBytes, byte(i))
+			data[d] = temp
 
-			payload = append(payload, byte(i))
+			// payload = append(payload, byte(i))
 		}
-		payloads = append(payloads, payload)
+		// payloads = append(payloads, payload)
 	}
-	return payloads, nil
+	return data, nil
 }
 
 // WritePayloadsToFile creates packets from raw bytes ([][]byte) and writes them as pcaps
-func WritePayloadsToFile(payloads [][]byte, path string) error {
+func WritePayloadsToFile(payloadData PayloadData, path string) error {
 	var packets [][]byte
 	var previousLen int
 	var fin bool
-	for i, payload := range payloads {
+	for i, payload := range payloadData {
 		//fin
-		if i == len(payloads)-1 {
+		if i == len(payloadData)-1 {
 			fin = true
 		}
 		//seq
 		if i > 0 {
-			previousLen += len(payloads[i-1])
+			previousLen += len(payloadData[i-1].RawBytes)
 		}
-		packet, err := CreatePacket(payload, i, fin, previousLen)
+		packet, err := CreatePacket(payload.RawBytes, i, fin, previousLen, payload.SrcPort, payload.DstPort)
 		if err != nil {
 			return err
 		}
@@ -86,7 +92,7 @@ func WritePayloadsToFile(payloads [][]byte, path string) error {
 }
 
 // CreatePacket returns a []byte datagram
-func CreatePacket(data []byte, seq int, fin bool, previousLen int) ([]byte, error) {
+func CreatePacket(data []byte, seq int, fin bool, previousLen int, srcPort, dstPort int) ([]byte, error) {
 	inter, err := net.InterfaceByName("en0")
 	if err != nil {
 		return nil, err
@@ -109,8 +115,8 @@ func CreatePacket(data []byte, seq int, fin bool, previousLen int) ([]byte, erro
 	ip.IHL = 5 // TODO - always 5 bytes???
 
 	tcp := &layers.TCP{
-		SrcPort: 8000,
-		DstPort: 9000,
+		SrcPort: layers.TCPPort(srcPort),
+		DstPort: layers.TCPPort(dstPort),
 		Seq:     uint32(seq + previousLen),
 		Ack:     1,
 		PSH:     true,
